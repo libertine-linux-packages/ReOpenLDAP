@@ -1,0 +1,209 @@
+# This file is part of libertine linux's package openldap. It is subject to the licence terms in the COPYRIGHT file found in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/libertine/master/COPYRIGHT. No part of libertine linux's package openldap, including this file, may be copied, modified, propagated, or distributed except according to the terms contained in the COPYRIGHT file.
+# Copyright © 2016 The developers of libertine linux's package openldap. See the COPYRIGHT file in the top-level directory of this distribution and at https://raw.githubusercontent.com/libertine-linux-packages/libertine/master/COPYRIGHT.
+
+
+variant=upstream
+
+depends libressl
+
+depends gmp
+
+depends libuuid
+
+depends build_ccache
+build_needs ccache
+
+depends build_gnumake
+build_needs make
+
+depends build_slibtool
+build_needs clibtool-static libtoolize realpath
+
+depends build_perl
+build_needs perl
+
+depends build_autoconf
+build_needs autoconf autoheader autom4te autoreconf autoscan autoupdate ifnames
+
+depends build_automake
+build_needs automake aclocal
+
+depends build_gnum4
+build_needs m4
+
+depends build_PkgConfig
+build_needs pkg-config
+
+depends build_musl_cross_make_host
+build_needs "$libertine_host"-cc "$libertine_host"-c++ "$libertine_host"-cpp "$libertine_host"-ar "$libertine_host"-ld "$libertine_host"-ranlib
+
+depends build_busybox
+build_needs expr install sort ls sleep
+
+build_needs dirname env sh awk rm cp sed cat grep touch date sed tr basename
+
+depends build_file
+build_needs file
+
+depends build_netbsd_src_patch
+build_needs patch
+
+depends build_bash
+build_needs bash
+
+depends build_bc
+build_needs bc
+
+depends build_git
+build_needs git
+
+build_needs sed chmod rm
+libertine_compile_ReOpenLDAP()
+{
+	pushd "$(libertine_public_sourcePath)"
+				
+		libertine_public_autoconf_replaceWithKnownVersionOfCompile build
+		libertine_public_autoconf_replaceWithKnownVersionOfConfigGuess build
+		libertine_public_autoconf_replaceWithKnownVersionOfConfigSub build
+		libertine_public_autoconf_replaceWithKnownVersionOfDepcomp build
+		libertine_public_autoconf_replaceWithKnownVersionOfInstallSh build
+		libertine_public_autoconf_replaceWithKnownVersionOfLtmainSh build
+		libertine_public_autoconf_replaceWithKnownVersionOfMissing build
+		
+		# Needs a fake roffpp, gsoelim or soelim
+		printf '#!%s\n' "$(libertine_public_buildNeedsPath)"/sh >"$(libertine_public_buildNeedsPath)"/soelim
+		chmod +x "$(libertine_public_buildNeedsPath)"/soelim
+		
+		# Needs a fake whoami
+		cat >"$(libertine_public_buildNeedsPath)"/whoami <<-EOF
+			#$(libertine_public_buildNeedsPath)/sh
+			printf 'root\n'
+		EOF
+		chmod +x "$(libertine_public_buildNeedsPath)"/whoami
+		
+		sed -i \
+			-e 's;WHOWHERE=".*";WHOWHERE="root@'"$libertine_hostUnameHostName"':/home/libertine";g' \
+			-e 's;\$(RELEASE_DATE_CMD);'"$libertine_hostUnameTimestampIso8601"';g' \
+			build/BRANDING
+		
+		# Sadly a bug in the PkgConfig program causes it to not work if multiple packages are specified
+		sed -i \
+			-e 's;openssl libssl;openssl;g' \
+			configure.ac
+		
+		sed -i \
+			-e 's;include libraries clients servers doc/man;include libraries clients servers;g' \
+			-e 's;SUBDIRS += contrib;SUBDIRS += ;g' \
+			-e 's;SUBDIRS += tests;SUBDIRS += ;g' \
+			Makefile.am
+		
+		sed -i \
+			-e 's;libldap;libreldap;g' \
+			-e 's;-weak liblber.la;;g' \
+			libraries/libreldap/Makefile.am
+		
+		sed -i \
+			-e 's;slapd_LDADD += \$(SLAPD_LIBS);slapd_LDADD += $(SLAPD_LIBS) -L./back-mdb/.libs;g' \
+			servers/slapd/Makefile.am
+				
+		libertine_public_populateInputSysroot libressl gmp libuuid
+		
+		autoreconf --install --force --verbose --include=build --warnings=none
+				
+		sed -i -e 's;/usr/bin/file;file;g' configure
+		
+		export URANDOM_DEVICE=/dev/urandom
+		libertine_public_autoconf_modernAutoconfConfigure \
+			--disable-shared \
+			--enable-static \
+			--disable-dependency-tracking \
+			--enable-debug=no \
+			--enable-syslog \
+			--enable-proctitle \
+			--enable-ipv6 \
+			--enable-local \
+			--enable-slapd \
+			--enable-dynacl=no \
+			--enable-aci=yes \
+			--enable-cleartext=no \
+			--enable-crypt=yes \
+			--enable-lmpasswd=no \
+			--enable-spasswd=no \
+			--enable-modules=no \
+			--enable-rewrite=yes \
+			--enable-rlookups=no \
+			--enable-slapi=no \
+			--enable-slp=no \
+			--enable-wrappers=no \
+			--enable-bdb=no \
+			--enable-dnssrv=yes \
+			--enable-hdb=no \
+			--enable-ldap=yes \
+			--enable-mdb=yes \
+			--enable-meta=no \
+			--enable-monitor=no \
+			--enable-ndb=no \
+			--enable-null=no \
+			--enable-passwd=no \
+			--enable-perl=no \
+			--enable-relay=yes \
+			--enable-shell=no \
+			--enable-sock=no \
+			--enable-sql=no \
+			--enable-overlays \
+			--enable-static \
+			--enable-shared=no \
+			--with-tls=openssl \
+			--with-mp=gmp \
+			--without-pic \
+			--with-yielding_select=yes
+		unset URANDOM_DEVICE
+		
+		# Glibc-ism
+		sed -i -e 's;#include <time.h>;#include <sys/time.h>\n#include <time.h>;g' libraries/libreldap/hipagut.c
+		
+		# Glibc-ism
+		sed -i -e '/mallopt/d' servers/slapd/main.c
+		
+		# Fix for __GNUC_PREREQ / __GLIBC_PREREQ usage in mdbx
+		sed -i \
+			-e 's;__GNUC_PREREQ(.*,.*);1;g' \
+			-e 's;__GLIBC_PREREQ(.*,.*);1;g' \
+			libraries/libmdbx/mdb.c
+		
+		# Fix for musl not providing __cxa_thread_atexit_impl; intertwined with __GLIBC_PREREQ
+		sed -i -e 's;define MDBX_USE_THREAD_ATEXIT 1;define MDBX_USE_THREAD_ATEXIT 0;g' libraries/libmdbx/mdb.c
+		
+		# Fix for __assert_fail redefinition
+		sed -i -e '/__assert_fail/,+5d' libraries/libmdbx/reopen.h
+		
+		# Fix for pthread_yield missing in musl
+		sed -i \
+			-e 's;#include <pthread.h>;#include <pthread.h>\n#include <sched.h>;g' \
+			-e 's;pthread_yield;sched_yield;g' \
+			libraries/libmdbx/mdb.c
+		
+		# Fix for musl lacking execinfo.h
+		cat >servers/slapd/backtrace.c <<-'EOF'
+			void slap_backtrace_set_enable( int value ) {}
+			int slap_backtrace_get_enable() {return 0;}
+			void slap_backtrace_set_dir(const char* path ) {}
+			int slap_limit_coredump_set(int mbytes) {return mbytes > 0;}
+			int slap_limit_memory_set(int mbytes) {return mbytes > 0;}
+			int slap_limit_coredump_get() {return 0;}
+			int slap_limit_memory_get() {return 0;}
+			
+			void slap_backtrace_debug(void) {}
+		EOF
+		
+		# TODO: Remove check for Linux that assumes glibc; our compiler flags currently define -D__gnu_linux__
+		
+		libertine_public_make
+		
+		libertine_public_make DESTDIR="$(libertine_public_outputHostSysrootPath)" install
+		
+	popd
+	
+	rm -rf "$(libertine_public_outputHostSysrootPath)"/usr/bin/ldapadd
+	ln -s ldapmodify "$(libertine_public_outputHostSysrootPath)"/usr/bin/ldapadd
+}
