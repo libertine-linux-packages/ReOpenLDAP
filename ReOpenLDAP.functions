@@ -160,41 +160,41 @@ libertine_compile_ReOpenLDAP()
 		unset URANDOM_DEVICE
 		
 		# Glibc-ism
-		sed -i -e 's;#include <time.h>;#include <sys/time.h>\n#include <time.h>;g' libraries/libreldap/hipagut.c
+		#sed -i -e 's;#include <time.h>;#include <sys/time.h>\n#include <time.h>;g' libraries/libreldap/hipagut.c
 		
-		# Glibc-ism
-		sed -i -e '/mallopt/d' servers/slapd/main.c
-		
+		# # Glibc-ism
+		# sed -i -e '/mallopt/d' servers/slapd/main.c
+		#
 		# Fix for __GNUC_PREREQ / __GLIBC_PREREQ usage in mdbx
 		sed -i \
 			-e 's;__GNUC_PREREQ(.*,.*);1;g' \
 			-e 's;__GLIBC_PREREQ(.*,.*);1;g' \
 			libraries/libmdbx/mdb.c
-		
-		# Fix for musl not providing __cxa_thread_atexit_impl; intertwined with __GLIBC_PREREQ
-		sed -i -e 's;define MDBX_USE_THREAD_ATEXIT 1;define MDBX_USE_THREAD_ATEXIT 0;g' libraries/libmdbx/mdb.c
-		
-		# Fix for __assert_fail redefinition
-		sed -i -e '/__assert_fail/,+5d' libraries/libmdbx/reopen.h
-		
-		# Fix for pthread_yield missing in musl
-		sed -i \
-			-e 's;#include <pthread.h>;#include <pthread.h>\n#include <sched.h>;g' \
-			-e 's;pthread_yield;sched_yield;g' \
-			libraries/libmdbx/mdb.c
-		
-		# Fix for musl lacking execinfo.h
-		cat >servers/slapd/backtrace.c <<-'EOF'
-			void slap_backtrace_set_enable( int value ) {}
-			int slap_backtrace_get_enable() {return 0;}
-			void slap_backtrace_set_dir(const char* path ) {}
-			int slap_limit_coredump_set(int mbytes) {return mbytes > 0;}
-			int slap_limit_memory_set(int mbytes) {return mbytes > 0;}
-			int slap_limit_coredump_get() {return 0;}
-			int slap_limit_memory_get() {return 0;}
-			
-			void slap_backtrace_debug(void) {}
-		EOF
+		#
+		# # Fix for musl not providing __cxa_thread_atexit_impl; intertwined with __GLIBC_PREREQ
+		# sed -i -e 's;define MDBX_USE_THREAD_ATEXIT 1;define MDBX_USE_THREAD_ATEXIT 0;g' libraries/libmdbx/mdb.c
+		#
+		# # Fix for __assert_fail redefinition
+		# sed -i -e '/__assert_fail/,+5d' libraries/libmdbx/reopen.h
+		#
+		# # Fix for pthread_yield missing in musl
+		# sed -i \
+		# 	-e 's;#include <pthread.h>;#include <pthread.h>\n#include <sched.h>;g' \
+		# 	-e 's;pthread_yield;sched_yield;g' \
+		# 	libraries/libmdbx/mdb.c
+		#
+		# # Fix for musl lacking execinfo.h
+		# cat >servers/slapd/backtrace.c <<-'EOF'
+		# 	void slap_backtrace_set_enable( int value ) {}
+		# 	int slap_backtrace_get_enable() {return 0;}
+		# 	void slap_backtrace_set_dir(const char* path ) {}
+		# 	int slap_limit_coredump_set(int mbytes) {return mbytes > 0;}
+		# 	int slap_limit_memory_set(int mbytes) {return mbytes > 0;}
+		# 	int slap_limit_coredump_get() {return 0;}
+		# 	int slap_limit_memory_get() {return 0;}
+		#
+		# 	void slap_backtrace_debug(void) {}
+		# EOF
 		
 		# TODO: Remove check for Linux that assumes glibc; our compiler flags currently define -D__gnu_linux__
 		
